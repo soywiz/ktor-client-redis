@@ -3,9 +3,9 @@ package io.ktor.experimental.client.redis
 import io.ktor.experimental.client.redis.protocol.*
 import io.ktor.experimental.client.redis.utils.*
 import io.ktor.network.sockets.*
-import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.channels.*
-import kotlinx.coroutines.experimental.io.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.io.*
 import java.io.*
 import java.nio.charset.*
 

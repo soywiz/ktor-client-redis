@@ -1,7 +1,10 @@
 
 buildscript {
     repositories {
+        mavenLocal()
         jcenter()
+        maven { url 'https://dl.bintray.com/kotlin/kotlin-dev' }
+        maven { url 'https://dl.bintray.com/kotlin/kotlin-eap' }
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
@@ -9,10 +12,13 @@ buildscript {
 }
 
 repositories {
+    mavenLocal()
     maven { url 'https://dl.bintray.com/kotlin/ktor' }
     maven { url 'https://dl.bintray.com/kotlin/kotlinx' }
     maven { url 'https://dl.bintray.com/palantir/releases' }
     jcenter()
+    maven { url 'https://dl.bintray.com/kotlin/kotlin-dev' }
+    maven { url 'https://dl.bintray.com/kotlin/kotlin-eap' }
 }
 
 apply plugin: 'kotlin'
@@ -20,7 +26,7 @@ apply plugin: 'maven'
 apply plugin: 'maven-publish'
 
 group 'io.ktor.client'
-version '0.1.0'
+version '0.1.0-eap13-SNAPSHOT'
 
 kotlin.experimental.coroutines 'enable'
 
