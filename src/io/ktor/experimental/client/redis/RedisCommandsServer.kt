@@ -1,6 +1,6 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.channels.*
 import java.util.*
 
 /**
@@ -40,7 +40,12 @@ suspend fun Redis.clientGetname(): String? = executeTypedNull<String>("client", 
  * @since 2.4.0
  */
 //[ip:port] [ID client-id] [TYPE normal|master|slave|pubsub] [ADDR ip:port] [SKIPME yes/no]
-suspend fun Redis.clientKill(clientId: String? = null, type: String? = null, addr: String? = null, skipme: Boolean = true): Unit =
+suspend fun Redis.clientKill(
+    clientId: String? = null,
+    type: String? = null,
+    addr: String? = null,
+    skipme: Boolean = true
+): Unit =
     executeBuildNotNull {
         if (clientId != null) {
             add("ID")

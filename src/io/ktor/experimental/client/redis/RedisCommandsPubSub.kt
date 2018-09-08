@@ -1,10 +1,16 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.channels.*
 
 interface RedisPubSub {
     interface Packet
-    data class Subscription(val channel: String, val subscriptions: Long, val subscribe: Boolean, val isPattern: Boolean = false) : Packet
+    data class Subscription(
+        val channel: String,
+        val subscriptions: Long,
+        val subscribe: Boolean,
+        val isPattern: Boolean = false
+    ) : Packet
+
     data class Message(val channel: String, val message: String, val isPattern: Boolean = false) : Packet
     //data class Packet(val channel: String, val content: String, val isPattern: Boolean, val isMessage: Boolean)
 }
@@ -79,9 +85,11 @@ internal suspend fun RedisPubSub.subscribe(vararg channels: String): RedisPubSub
  */
 internal suspend fun RedisPubSub.channel(): ReceiveChannel<RedisPubSub.Packet> = (this as RedisPubSubImpl).channel
 
-internal suspend fun RedisPubSub.messagesChannel(): ReceiveChannel<RedisPubSub.Message> = channel().map { it as? RedisPubSub.Message? }.filterNotNull()
+internal suspend fun RedisPubSub.messagesChannel(): ReceiveChannel<RedisPubSub.Message> =
+    channel().map { it as? RedisPubSub.Message? }.filterNotNull()
 
-internal suspend fun RedisPubSub.subscriptionChannel(): ReceiveChannel<RedisPubSub.Subscription> = channel().map { it as? RedisPubSub.Subscription? }.filterNotNull()
+internal suspend fun RedisPubSub.subscriptionChannel(): ReceiveChannel<RedisPubSub.Subscription> =
+    channel().map { it as? RedisPubSub.Subscription? }.filterNotNull()
 
 /**
  * Stop listening for messages posted to channels matching the given patterns

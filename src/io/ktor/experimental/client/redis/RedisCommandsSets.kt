@@ -1,6 +1,6 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.channels.*
 
 /**
  * Get the number of members in a set
@@ -79,7 +79,8 @@ suspend fun Redis.sdiffstore(destination: String, key: String, vararg keys: Stri
  *
  * @since 1.0.0
  */
-suspend fun Redis.sinter(key: String, vararg keys: String): Set<String> = executeArrayString("SINTER", key, *keys).toSet()
+suspend fun Redis.sinter(key: String, vararg keys: String): Set<String> =
+    executeArrayString("SINTER", key, *keys).toSet()
 
 /**
  * Intersect multiple sets and store the resulting set in a key
@@ -102,7 +103,8 @@ suspend fun Redis.sinterstore(destination: String, key: String, vararg keys: Str
  *
  * @since 1.0.0
  */
-suspend fun Redis.sunion(key: String, vararg keys: String): Set<String> = executeArrayString("SUNION", key, *keys).toSet()
+suspend fun Redis.sunion(key: String, vararg keys: String): Set<String> =
+    executeArrayString("SUNION", key, *keys).toSet()
 
 /**
  * Add multiple sets and store the resulting set in a key
@@ -166,7 +168,8 @@ suspend fun Redis.srandmember(key: String): String? = executeTypedNull<String>("
  *
  * @since 1.0.0
  */
-suspend fun Redis.srandmember(key: String, count: Long): Set<String> = executeArrayString("SRANDMEMBER", key, count).toSet()
+suspend fun Redis.srandmember(key: String, count: Long): Set<String> =
+    executeArrayString("SRANDMEMBER", key, count).toSet()
 
 /**
  * Incrementally iterate Set elements
@@ -175,5 +178,6 @@ suspend fun Redis.srandmember(key: String, count: Long): Set<String> = executeAr
  *
  * @since 2.8.0
  */
-suspend fun Redis.sscan(key: String, pattern: String? = null): ReceiveChannel<String> = _scanBaseString("SSCAN", key, pattern)
+suspend fun Redis.sscan(key: String, pattern: String? = null): ReceiveChannel<String> =
+    _scanBaseString("SSCAN", key, pattern)
 

@@ -1,7 +1,6 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.channels.*
 import kotlin.reflect.*
 
 enum class SortDirection { ASC, DESC }
@@ -48,11 +47,12 @@ suspend fun <T : Any> Redis.executeTyped(vararg args: Any?, clazz: KClass<T>): T
     Double::class -> (executeText(*args)?.toString()?.toDoubleOrNull() ?: 0.0) as T
     Int::class -> (executeText(*args)?.toString()?.toIntOrNull() ?: 0) as T
     Long::class -> (executeText(*args)?.toString()?.toLongOrNull() ?: 0L) as T
-    ByteArray::class -> (executeBinary(*args)  ?: byteArrayOf()) as T
+    ByteArray::class -> (executeBinary(*args) ?: byteArrayOf()) as T
     else -> error("Unsupported type")
 }
 
-suspend inline fun <reified T : Any> Redis.executeTypedNull(vararg args: Any?): T? = executeTypedNull(*args, clazz = T::class)
+suspend inline fun <reified T : Any> Redis.executeTypedNull(vararg args: Any?): T? =
+    executeTypedNull(*args, clazz = T::class)
 
 suspend inline fun <reified T : Any> Redis.executeTyped(vararg args: Any?): T = executeTyped(*args, clazz = T::class)
 

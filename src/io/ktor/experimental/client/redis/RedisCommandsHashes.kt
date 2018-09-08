@@ -1,6 +1,6 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.channels.*
 
 /**
  * Delete one or more hash fields
@@ -97,7 +97,8 @@ suspend fun Redis.hlen(key: String): Long = executeTyped("HLEN", key)
  *
  * @since 2.0.0
  */
-suspend fun Redis.hmget(key: String, vararg fields: String): List<String> = if (fields.isNotEmpty()) executeArrayString("HMGET", key, *fields) else listOf()
+suspend fun Redis.hmget(key: String, vararg fields: String): List<String> =
+    if (fields.isNotEmpty()) executeArrayString("HMGET", key, *fields) else listOf()
 
 /**
  * Set multiple hash fields to multiple values
@@ -119,7 +120,8 @@ suspend fun Redis.hmset(key: String, vararg pairs: Pair<String, String>) = if (p
  *
  * @since 2.0.0
  */
-suspend fun Redis.hmset(key: String, map: Map<String, String>) = hmset(key, *map.map { it.key to it.value }.toTypedArray())
+suspend fun Redis.hmset(key: String, map: Map<String, String>) =
+    hmset(key, *map.map { it.key to it.value }.toTypedArray())
 
 /**
  * Set the string value of a hash field

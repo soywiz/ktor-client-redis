@@ -1,6 +1,6 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.channels.*
 import java.util.*
 
 /**
@@ -100,7 +100,15 @@ suspend fun Redis.keys(pattern: String) = executeArrayString("KEYS", pattern)
  *
  * @since 2.6.0
  */
-suspend fun Redis.migrate(host: String, port: Int, vararg keys: String, destinationDb: Int = 0, timeoutMs: Int = 0, copy: Boolean = false, replace: Boolean = false) {
+suspend fun Redis.migrate(
+    host: String,
+    port: Int,
+    vararg keys: String,
+    destinationDb: Int = 0,
+    timeoutMs: Int = 0,
+    copy: Boolean = false,
+    replace: Boolean = false
+) {
     check(keys.isNotEmpty()) { "Keys must not be empty" }
 
     executeTyped<Unit>(arrayListOf<Any?>().apply {
