@@ -6,8 +6,8 @@ import com.palantir.docker.compose.*
 import com.palantir.docker.compose.connection.waiting.*
 import io.ktor.experimental.client.redis.geo.*
 import io.ktor.experimental.client.redis.protocol.*
-import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
 import org.junit.*
 import org.junit.Ignore
 import org.junit.Test
@@ -289,7 +289,7 @@ class IntegrationTest {
     @Ignore("ScriptKill doesn't seems to work yet. Disable for now.")
     fun testScriptingKill() = redisTest {
         run {
-            launch(start = CoroutineStart.UNDISPATCHED) {
+            val job1 = launch(start = CoroutineStart.UNDISPATCHED) {
                 try {
                     eval(
                         """
@@ -303,6 +303,7 @@ class IntegrationTest {
             }
             delay(300)
             scriptKill()
+            job1.join()
         }
     }
 
@@ -842,8 +843,14 @@ class IntegrationTest {
         xadd(mystream, "name" to "a")
         val process1 = async {
             RedisClient(address, password = REDIS_PASSWORD).apply {
-                xprocessBatch(mystream, mygroup1, consumer1, blockMs = 1_000, batchSize = 3, id = ">") {
-                        stream, id, info ->
+                xprocessBatch(
+                    mystream,
+                    mygroup1,
+                    consumer1,
+                    blockMs = 1_000,
+                    batchSize = 3,
+                    id = ">"
+                ) { stream, id, info ->
                     log += "$stream :: $info"
                     println("$stream :: $info")
                 }
@@ -946,20 +953,26 @@ class IntegrationTest {
         // sum
         run {
             prepare(RedisZBoolStoreAggregate.SUM)
-            assertEquals(mapOf("a" to 110.0, "b" to 50.0, "c" to 300.0, "d" to 1000.0), zgetall(key3).toList().sortedBy { it.first }.toMap())
+            assertEquals(
+                mapOf("a" to 110.0, "b" to 50.0, "c" to 300.0, "d" to 1000.0),
+                zgetall(key3).toList().sortedBy { it.first }.toMap()
+            )
             assertEquals(mapOf("a" to 110.0, "c" to 300.0), zgetall(key4).toList().sortedBy { it.first }.toMap())
         }
         // min
         run {
             prepare(RedisZBoolStoreAggregate.MIN)
-            assertEquals(mapOf("a" to 10.0, "b" to 50.0, "c" to 0.0, "d" to 1000.0), zgetall(key3).toList().sortedBy { it.first }.toMap())
+            assertEquals(
+                mapOf("a" to 10.0, "b" to 50.0, "c" to 0.0, "d" to 1000.0),
+                zgetall(key3).toList().sortedBy { it.first }.toMap()
+            )
             assertEquals(mapOf("a" to 10.0, "c" to 0.0), zgetall(key4).toList().sortedBy { it.first }.toMap())
         }
     }
 
     @Test
     fun testDisableProcessing() = redisTest {
-        RedisClient(address, maxConnections = 1, password = REDIS_PASSWORD).apply {
+        RedisClient(address, password = REDIS_PASSWORD).apply {
             clientReplyOff {
                 del(key1)
                 lpush(key1, "a", "b", "c")
@@ -973,8 +986,8 @@ class IntegrationTest {
         val log = arrayListOf<String>()
         val prepared = CompletableDeferred<Unit>()
         val complete = CompletableDeferred<Unit>()
-        launch(start = CoroutineStart.UNDISPATCHED) {
-            RedisClient(address, maxConnections = 1, password = REDIS_PASSWORD).apply {
+        val job1 = launch(start = CoroutineStart.UNDISPATCHED) {
+            RedisClient(address, password = REDIS_PASSWORD).apply {
                 val channel = monitor()
                 prepared.complete(Unit)
                 repeat(4) {
@@ -985,7 +998,7 @@ class IntegrationTest {
         }
         val value1 = "value1"
         prepared.await()
-        RedisClient(address, maxConnections = 1, password = REDIS_PASSWORD).apply {
+        RedisClient(address, password = REDIS_PASSWORD).apply {
             del(key1)
             set(key1, value1)
             assertEquals(value1, get(key1))
@@ -1002,6 +1015,7 @@ class IntegrationTest {
                 }
             )
         }
+        job1.join()
     }
 
     @Test
@@ -1009,19 +1023,18 @@ class IntegrationTest {
         val log = arrayListOf<RedisPubSub.Message>()
         val completed = CompletableDeferred<Unit>()
         val listening = CompletableDeferred<Unit>()
-        launch(start = CoroutineStart.UNDISPATCHED) {
-            RedisClient(address, maxConnections = 1, password = REDIS_PASSWORD).apply {
+        val job1 = launch(start = CoroutineStart.UNDISPATCHED) {
+            RedisClient(address, password = REDIS_PASSWORD).apply {
                 val sub = subscribe("mypubsub")
                 val messages = sub.messagesChannel()
                 listening.complete(Unit)
                 repeat(3) {
                     log += messages.receive()
                 }
-                completed.complete(Unit)
             }
         }
 
-        launch(start = CoroutineStart.UNDISPATCHED) {
+        val job2 = launch(start = CoroutineStart.UNDISPATCHED) {
             listening.await()
             publish("mypubsub2", "nope")
             publish("mypubsub", "hi")
@@ -1035,25 +1048,27 @@ class IntegrationTest {
                 ),
                 log
             )
-            completed.await()
         }
+
+        job1.join()
+        job2.join()
     }
 
     @Test
-    fun testTransaction() = redisTest(maxConnections = 1) {
+    fun testTransaction() = redisTest {
         val value = "value"
         del(key1)
         del(key2)
         transaction {
             set(key1, value)
             assertEquals("QUEUED", get(key1)) // The same client sees QUEUED
-            redisTest(maxConnections = 1) {
+            redisTest {
                 assertEquals(null, get(key1)) // Other clients doesn't sees the changes
             }
             set(key2, value)
         }
         assertEquals(value, get(key1)) // The same client now sees the result
-        redisTest(maxConnections = 1) {
+        redisTest {
             assertEquals(value, get(key1)) // As does other clients
         }
     }
@@ -1089,18 +1104,16 @@ class IntegrationTest {
 
     private fun redisTest(
         password: String = REDIS_PASSWORD,
-        maxConnections: Int = 50,
         cleanup: suspend Redis.() -> Unit = {},
         callback: suspend Redis.() -> Unit
-    ) =
-        redisTest(address, password, maxConnections = maxConnections) {
+    ) = redisTest(address, password) {
+        cleanup()
+        try {
+            callback()
+        } finally {
             cleanup()
-            try {
-                callback()
-            } finally {
-                cleanup()
-            }
         }
+    }
 
     companion object {
         val REDIS_SERVICE = "redis"

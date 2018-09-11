@@ -1,6 +1,6 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.experimental.io.*
 import kotlinx.io.core.*
 import java.net.*
@@ -8,10 +8,9 @@ import java.net.*
 internal fun redisTest(
     address: InetSocketAddress,
     password: String? = null,
-    maxConnections: Int = 50,
     block: suspend Redis.() -> Unit
 ) = runBlocking {
-    RedisClient(address, password = password, maxConnections = maxConnections).use { redis ->
+    RedisClient(address, password = password).use { redis ->
         redis.block()
     }
 }

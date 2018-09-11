@@ -1,14 +1,18 @@
 package io.ktor.experimental.client.redis
 
 import io.ktor.experimental.client.redis.protocol.*
+import io.ktor.experimental.client.redis.utils.*
 import io.ktor.network.selector.*
 import io.ktor.network.sockets.*
+import io.ktor.network.sockets.Socket
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.experimental.io.* // This is fine!
 import java.io.*
+import java.lang.RuntimeException
 import java.net.*
 import java.nio.charset.*
-import java.util.concurrent.atomic.*
+import kotlin.coroutines.*
 
 /**
  * A Redis basic interface exposing emiting commands receiving their responses.
@@ -40,138 +44,199 @@ interface Redis : Closeable {
      */
     suspend fun execute(vararg args: Any?): Any?
 
-    fun RedisInternalChannel.setReplyMode(mode: RedisClientReplyMode) = Unit
-
-    fun RedisInternalChannel.getMessageChannel(): ReceiveChannel<Any> = Channel<Any>(0).apply { close() }
+    /**
+     * Gets the channel used for receiving messages.
+     */
+    fun getMessageChannel(): ReceiveChannel<Any?> = Channel<Any?>(0).apply { close() }
 }
 
-@Deprecated("Do not use for now")
-object RedisInternalChannel
-
-@Deprecated("Do not use for now")
 enum class RedisClientReplyMode { ON, OFF, SKIP }
+
+class RedisInvalidAuthException(message: String) : RuntimeException(message)
 
 /**
  * TODO
  * 1. add pipeline timeouts
- * 2. multiple endpoints (since the point of having several connections is mostly multiple endpoints)
- * 3. redis connections are stateful, so the connection pool cannot be done at this level
  */
 
-/**
- * Constructs a Redis client that will connect to [address] keeping a connection pool,
- * keeping as much as [maxConnections] and using the [charset].
- * Optionally you can define the [password] of the connection.
- */
-class RedisClient(
+//class RedisClusteredClient(
+//    private val addresses: List<SocketAddress> = listOf(InetSocketAddress("127.0.0.1", 6379)),
+//    val maxConnections: Int = 50,
+//    private val password: String? = null,
+//    private val charset: Charset = Charsets.UTF_8,
+//    private val dispatcher: CoroutineDispatcher = DefaultDispatcher
+//) {
+//    val pooledClients = arrayListOf<Redis>()
+//
+//    private fun allocateClient(): Redis
+//
+//    private fun freeClient(client: Redis)
+//
+//    suspend fun session(callback: suspend Redis.() -> Unit) {
+//        val client = allocateClient()
+//        try {
+//            callback(client)
+//        } finally {
+//            freeClient(client)
+//        }
+//    }
+//}
+
+typealias RedisClient = SingleRedisClient
+
+class SingleRedisClient(
     private val address: SocketAddress = InetSocketAddress("127.0.0.1", 6379),
-    maxConnections: Int = 50,
     private val password: String? = null,
     override val charset: Charset = Charsets.UTF_8,
     private val dispatcher: CoroutineDispatcher = DefaultDispatcher
 ) : Redis {
-    constructor(
-        host: String,
-        port: Int = Redis.DEFAULT_PORT,
-        maxConnections: Int = 50,
-        password: String? = null,
-        charset: Charset = Charsets.UTF_8,
-        dispatcher: CoroutineDispatcher = DefaultDispatcher
-    ) : this(
-        InetSocketAddress(host, port),
-        maxConnections,
-        password,
-        charset,
-        dispatcher
-    )
-
-    override val context: Job = Job()
-
-    private val runningPipelines = AtomicInteger()
     private val selectorManager = ActorSelectorManager(dispatcher)
-    private val requestQueue = Channel<RedisRequest>()
-
-    private val postmanService = actor<RedisRequest>(
-        dispatcher, parent = context
-    ) {
-        channel.consumeEach {
-            if (requestQueue.offer(it)) return@consumeEach
-
-            while (true) {
-                val current = runningPipelines.get()
-                if (current >= maxConnections) break
-
-                if (!runningPipelines.compareAndSet(current, current + 1)) continue
-
-                createNewPipeline()
-                break
-            }
-
-            requestQueue.send(it)
-        }
-
-        requestQueue.close()
-    }
-
-    init {
-        context.invokeOnCompletion {
-            selectorManager.close()
-        }
-    }
+    private var _connection: RedisConnection? = null
+    override val context: Job = Job()
+    private var replyMode = RedisClientReplyMode.ON
 
     override suspend fun execute(vararg args: Any?): Any? {
-        return when (rmode) {
-            RedisClientReplyMode.ON, RedisClientReplyMode.SKIP -> {
-                val result = CompletableDeferred<Any?>()
-                postmanService.send(RedisRequest(args, result))
-                if (rmode != RedisClientReplyMode.SKIP) {
-                    try {
-                        result.await()
-                    } catch (e: RedisException) {
-                        throw RedisException(e.message ?: "error", args)
-                    }
-                } else {
-                    null
-                }
+        checkSpecialCommands(*args)
+        val connection = getConnection()
+        return when (replyMode) {
+            RedisClientReplyMode.ON -> {
+                println("MODE_ON")
+                connection.writePacketAndWait(*args)
+                connection.readPacket(args)
             }
-            else -> {
-                postmanService.send(RedisRequest(args, null))
+            RedisClientReplyMode.SKIP -> {
+                println("MODE_SKIP")
+                connection.writePacketAsap(*args)
+                connection.skipPacket(args)
+                null
+            }
+            RedisClientReplyMode.OFF -> {
+                println("MODE_OFF")
+                connection.writePacketAsap(*args)
                 null
             }
         }
     }
 
-    override fun close() {
-        context.cancel()
-    }
-
-    private suspend fun createNewPipeline() {
-        val socket = aSocket(selectorManager)
-            .tcpNoDelay()
-            .tcp()
-            .connect(address)
-
-        val pipeline = ConnectionPipeline(socket, requestQueue, password, charset, dispatcher = dispatcher)
-
-        pipeline.context.invokeOnCompletion {
-            runningPipelines.decrementAndGet()
-        }
-    }
-
-    private var rmode = RedisClientReplyMode.ON
-
-    override fun RedisInternalChannel.setReplyMode(mode: RedisClientReplyMode) {
-        rmode = mode
-    }
-
-    override fun RedisInternalChannel.getMessageChannel(): ReceiveChannel<Any> {
-        setReplyMode(RedisClientReplyMode.OFF)
-        return produce(context) {
+    override fun getMessageChannel(): ReceiveChannel<Any?> {
+        replyMode = RedisClientReplyMode.OFF
+        return produce {
+            val connection = getConnection()
             while (true) {
-                val result = CompletableDeferred<Any?>()
-                postmanService.send(RedisRequest(null, result))
-                send(result.await() ?: Unit)
+                channel.send(connection.readPacket())
             }
         }
+    }
+
+    private suspend fun getConnection(): RedisConnection {
+        if (_connection?.isAlive == false) {
+            _connection = null
+        }
+
+        if (_connection == null) {
+            val socket = aSocket(selectorManager).tcpNoDelay().tcp().connect(address)
+            _connection = RedisConnection(context, socket, socket.openReadChannel(), socket.openWriteChannel(), charset)
+            if (password != null) {
+                _connection?.writePacketAndWait("AUTH", password)
+                val result = _connection?.readPacket()
+                if (result != "OK") {
+                    throw RedisInvalidAuthException(result?.toString() ?: "error")
+                }
+            }
+        }
+        return _connection!!
+    }
+
+    private fun checkSpecialCommands(vararg args: Any?) {
+        if (args.getOrNull(0)?.toString()?.equals("client", ignoreCase = true) == true) {
+            if (args.getOrNull(1)?.toString()?.equals("reply", ignoreCase = true) == true) {
+                val mode = args.getOrNull(2)?.toString()?.toLowerCase() ?: "on"
+                replyMode = when (mode) {
+                    "on" -> RedisClientReplyMode.ON
+                    "off" -> RedisClientReplyMode.OFF
+                    "skip" -> RedisClientReplyMode.SKIP
+                    else -> RedisClientReplyMode.ON
+                }
+            }
+        }
+    }
+
+    override fun close() {
+        _connection?.close()
+        _connection = null
+    }
+}
+
+private class RedisConnection(
+    context: CoroutineContext,
+    val socket: Socket,
+    val input: ByteReadChannel,
+    val output: ByteWriteChannel,
+    val charset: Charset
+) {
+    val isAlive get() = !socket.isClosed
+    val decoder = charset.newDecoder()
+    /*
+    val readQueue = AsyncQueue(context)
+    val writeQueue = AsyncQueue(context)
+
+    suspend fun writePacketAndWait(vararg data: Any?) {
+        writeQueue.sync {
+            output.writePacket { writeRedisValue(data, charset = charset) }
+            output.flush()
+        }
+    }
+
+    suspend fun readPacket(): Any? = readQueue.sync {
+        input.readRedisMessage(decoder)
+    }
+
+    fun writePacketAsap(vararg data: Any?) {
+        writeQueue {
+            output.writePacket { writeRedisValue(data, charset = charset) }
+            output.flush()
+        }
+    }
+
+    fun skipPacket(): Any? {
+        readQueue {
+            input.readRedisMessage(decoder)
+        }
+        return null
+    }
+
+    fun close() {
+        socket.close()
+    }
+    */
+
+    suspend fun writePacketAndWait(vararg data: Any?) {
+        println("writePacketAndWait: ${data.toList()}")
+        output.writePacket { writeRedisValue(data, charset = charset) }
+        output.flush()
+    }
+
+    suspend fun readPacket(args: Array<out Any?>? = null): Any? {
+        println("START readPacket")
+        val msg = input.readRedisMessage(decoder, args)
+        println("readPacket: $msg")
+        return msg
+    }
+
+    suspend fun writePacketAsap(vararg data: Any?) {
+        println("writePacketAsap: ${data.toList()}")
+        output.writePacket { writeRedisValue(data, charset = charset) }
+        output.flush()
+    }
+
+    suspend fun skipPacket(args: Array<out Any?>? = null): Any? {
+        println("START skipPacket")
+        val msg = input.readRedisMessage(decoder, args)
+        println("skipPacket: $msg")
+        return null
+    }
+
+    fun close() {
+        socket.close()
     }
 }
