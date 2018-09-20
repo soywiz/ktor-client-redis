@@ -5,7 +5,7 @@ import io.ktor.experimental.client.redis.utils.*
 import io.ktor.network.sockets.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
-import kotlinx.coroutines.io.*
+import kotlinx.coroutines.experimental.io.*
 import java.io.*
 import java.nio.charset.*
 
