@@ -1,6 +1,6 @@
 package io.ktor.experimental.client.redis
 
-import kotlinx.coroutines.experimental.io.*
+import kotlinx.coroutines.io.*
 import kotlinx.io.core.*
 
 internal fun buildChannel(block: BytePacketBuilder.() -> Unit): ByteReadChannel {

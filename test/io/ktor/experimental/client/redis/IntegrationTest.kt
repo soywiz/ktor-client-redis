@@ -6,8 +6,8 @@ import com.palantir.docker.compose.*
 import com.palantir.docker.compose.connection.waiting.*
 import io.ktor.experimental.client.redis.geo.*
 import io.ktor.experimental.client.redis.protocol.*
-import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
 import org.junit.*
 import org.junit.Ignore
 import org.junit.Test

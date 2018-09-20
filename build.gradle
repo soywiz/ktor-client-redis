@@ -1,6 +1,12 @@
 
 buildscript {
     repositories {
+        mavenLocal()
+        maven { url 'https://dl.bintray.com/kotlin/kotlin-dev' }
+        maven { url 'https://dl.bintray.com/kotlin/kotlin-eap' }
+        maven { url 'https://dl.bintray.com/kotlin/ktor' }
+        maven { url 'https://dl.bintray.com/kotlin/kotlinx' }
+        maven { url 'https://dl.bintray.com/palantir/releases' }
         jcenter()
     }
     dependencies {
@@ -9,6 +15,9 @@ buildscript {
 }
 
 repositories {
+    mavenLocal()
+    maven { url 'https://dl.bintray.com/kotlin/kotlin-dev' }
+    maven { url 'https://dl.bintray.com/kotlin/kotlin-eap' }
     maven { url 'https://dl.bintray.com/kotlin/ktor' }
     maven { url 'https://dl.bintray.com/kotlin/kotlinx' }
     maven { url 'https://dl.bintray.com/palantir/releases' }
@@ -20,7 +29,7 @@ apply plugin: 'maven'
 apply plugin: 'maven-publish'
 
 group 'io.ktor.client'
-version '0.1.0'
+version ext.project_version
 
 kotlin.experimental.coroutines 'enable'
 
@@ -31,7 +40,7 @@ sourceSets {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinx_coroutines"
+    //implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinx_coroutines"
     implementation "io.ktor:ktor-network:$ktor_version"
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
 
