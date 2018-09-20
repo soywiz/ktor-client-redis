@@ -11,6 +11,7 @@ buildscript {
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "com.jfrog.bintray.gradle:gradle-bintray-plugin:$bintrayVersion"
     }
 }
 
@@ -76,6 +77,73 @@ publishing {
             groupId project.group
             artifactId project.name
             version "$project.version"
+        }
+    }
+}
+
+// BINTRAY
+
+apply plugin: 'com.jfrog.bintray'
+
+def hasCredentials = rootProject.hasProperty('BINTRAY_USER') && rootProject.hasProperty('BINTRAY_KEY')
+
+def pomConfig = {
+    licenses {
+        license {
+            name projectLicense
+            url "https://opensource.org/licenses/$projectLicense"
+            distribution "repo"
+        }
+    }
+    developers {
+        developer {
+            id projectDevelNick
+            name projectDevelName
+            organization projectDevelNick
+            organizationUrl projectDevelNickUrl
+        }
+    }
+
+    scm {
+        url ext.projectUrl
+    }
+}
+
+project.ext.configureMavenCentralMetadata = {
+    def root = it.asNode()
+    // NOTE: Don't try to move top-level things (especially "description") to the pomConfig block
+    //       because they would resolve incorrectly to top-level project properties in Gradle/Groovy
+    root.appendNode('name', project.name)
+    root.appendNode('description', project.name)
+    root.appendNode('url', projectUrl)
+    root.children().last() + pomConfig
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifact javadocJar
+            artifact sourcesJar
+            pom.withXml(configureMavenCentralMetadata)
+        }
+    }
+}
+
+if (hasCredentials) {
+    bintray {
+        user = rootProject.property('BINTRAY_USER')
+        key = rootProject.property('BINTRAY_KEY')
+        publications = ['maven']
+        publish = true
+        override = true
+
+        pkg {
+            repo = "soywiz"
+            name = project.name
+            userOrg = 'soywiz'
+            licenses = ['Apache-2.0']
+            vcsUrl = gitUrl
         }
     }
 }
